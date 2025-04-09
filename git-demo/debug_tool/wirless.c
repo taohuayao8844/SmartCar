@@ -117,7 +117,7 @@ void pit_handler (void)
 double PID_speed(PID*p, double ActualSpeed, double SetSpeed, double *MOTOR_PID)
 {
 	double Increase;    
-	p->KP = *MOTOR_PID;    //????
+	p->KP = *MOTOR_PID;    //pid参数的赋值
 	p->KI = *(MOTOR_PID+1);
 	p->KD = *(MOTOR_PID+2);
 
