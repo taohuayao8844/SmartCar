@@ -32,10 +32,10 @@ int L1 = 0, L2 = 0, R2 = 0, R1 = 0;				    //四路电感值
 double ADC_bias = 0;                    //差比和偏差值
 double Left_High_Speed = 0,Right_High_Speed = 0,Speed_bias = 0;  //左右电机目标速度,速度偏差调整
 double L_MOTOR_Duty = 18,R_MOTOR_Duty = 18;            //左右电机占空比
-double basic_Speed=30,straight_speed=40;           //基础速度，直线速度
-int outtrack_flag=0;                //冲出赛道标志
-int straight_count=0;               //直线计数
-uint16 adc_max[4]={950,940,950,950};             //存储各电感最大值
+double basic_Speed=45,straight_speed=55;           //基础速度，直线速度
+int outtrack_flag=0,into_island=0,out_island=0;                //冲出赛道标志、入环岛标志、出环岛标志
+int straight_count=0,into_island_count=0,into_island_flag=0,out_island_count=0,out_island_flag=0;            //直线计数、入（出）环岛计时、数
+uint16 adc_max[4]={950,950,950,950};             //存储各电感最大值
 
 typedef struct PID                              //PID结构体
 {
@@ -74,6 +74,9 @@ void main()
             
         }
     }
+
+    gpio_init(IO_P07, GPO, 0, GPO_PUSH_PULL);          //出入环岛蜂鸣器提醒
+
     adc_init(ADC_CHANNEL1, ADC_10BIT);                                          //adc通道初始化                             
     adc_init(ADC_CHANNEL2, ADC_10BIT);                                          
     adc_init(ADC_CHANNEL3, ADC_10BIT);                                         
@@ -118,6 +121,37 @@ void pit_handler (void)
     R2=(unsigned long)R2*100/adc_max[2];
     R1=(unsigned long)R1*100/adc_max[3];
 
+    if(L1>=94&&L2<=15&&R1>=70&&into_island_flag==0){     //预入环
+        into_island_flag++;
+    }else if(into_island_flag>0){                    
+        into_island_flag++;                              //记时
+        if(into_island_flag>=70){
+                into_island=1;                           //打脚
+                into_island_count++;
+                if(into_island_count>=5){
+                        into_island=0;
+                        into_island_count=0;
+                        into_island_flag=0;
+                }
+        }
+    }
+
+    if(L1>90&&L2>90&&R1>90&&R2>90&&out_island_flag==0){   //预出环
+		out_island_flag++;	
+    }else if(out_island_flag>0){
+          out_island_flag++;                              //记时
+            if(out_island_flag>=40){                     
+                    out_island=1;                         //打脚
+                    out_island_count++;
+                    if(out_island_count>=20){
+                            out_island=0;
+                            out_island_count=0;
+                            out_island_flag=0;
+                    }
+            }
+    }
+
+
     if(L1<10&&L2<10&&R2<10&&R1<10){          //冲出赛道保护
         outtrack_flag=1;
     }
@@ -128,38 +162,48 @@ void pit_handler (void)
     ADC_bias=(double)((L1 - R1)+(L2 - R2))*100.0/(1+L1+L2+R1+R2);        //差比和 (-100~100)
     Speed_bias=fabs(PlacePID_Control(&Turn_PID,ADC_bias,0.0,Turn_pd));   
 
-    if(Speed_bias>10) Speed_bias=10;     //限制最大偏差
-
-    if(ADC_bias<10&&ADC_bias>-10&&straight_count<20){           //在直道计数
-        straight_count++;
-        if(ADC_bias>=0){       //左转
-            Left_High_Speed = basic_Speed - Speed_bias;
-            Right_High_Speed = basic_Speed + Speed_bias*0.8;   //外轮加的少一点
-        }
-        else{               //右转
-            Left_High_Speed = basic_Speed + Speed_bias*0.8;  
-            Right_High_Speed = basic_Speed - Speed_bias;
-        }
-    }else if(ADC_bias>10||ADC_bias<-10){          //不在直道
-        straight_count=0;
-        if(ADC_bias>=0){       //左转
-            Left_High_Speed = basic_Speed - Speed_bias;
-            Right_High_Speed = basic_Speed + Speed_bias*0.8;   //外轮加的少一点
-        }
-        else{               //右转
-            Left_High_Speed = basic_Speed + Speed_bias*0.8;  
-            Right_High_Speed = basic_Speed - Speed_bias;
-        }
-    }else if(ADC_bias<10&&ADC_bias>-10&&straight_count>=20){    //判定在直道
-        if(ADC_bias>=0){       //左转
-            Left_High_Speed = straight_speed - Speed_bias;
-            Right_High_Speed = straight_speed + Speed_bias*0.8;   //外轮加的少一点
-        }
-        else{               //右转
-            Left_High_Speed = straight_speed + Speed_bias*0.8;  
-            Right_High_Speed = straight_speed - Speed_bias;
+    if(into_island==1){                 //入环岛打脚
+        gpio_set_level(IO_P07, 1);
+        Left_High_Speed = basic_Speed - 20;
+        Right_High_Speed = basic_Speed + 20*0.8;   
+    }else if(out_island){
+        gpio_set_level(IO_P07, 1);
+        Left_High_Speed = basic_Speed + 30*0.8;  
+        Right_High_Speed = basic_Speed - 30;
+    }else{
+        gpio_set_level(IO_P07, 0);
+        if(ADC_bias<10&&ADC_bias>-10&&straight_count<15){           //在直道计数
+            straight_count++;
+            if(ADC_bias>=0){       //左转
+                Left_High_Speed = basic_Speed - Speed_bias;
+                Right_High_Speed = basic_Speed + Speed_bias*0.8;   //外轮加的少一点
+            }
+            else{               //右转
+                Left_High_Speed = basic_Speed + Speed_bias*0.8;  
+                Right_High_Speed = basic_Speed - Speed_bias;
+            }
+        }else if(ADC_bias>10||ADC_bias<-10){          //不在直道
+            straight_count=0;
+            if(ADC_bias>=0){       //左转
+                Left_High_Speed = basic_Speed - Speed_bias;
+                Right_High_Speed = basic_Speed + Speed_bias*0.8;   //外轮加的少一点
+            }
+            else{               //右转
+                Left_High_Speed = basic_Speed + Speed_bias*0.8;  
+                Right_High_Speed = basic_Speed - Speed_bias;
+            }
+        }else if(ADC_bias<10&&ADC_bias>-10&&straight_count>=15){    //判定在直道
+            if(ADC_bias>=0){       //左转
+                Left_High_Speed = straight_speed - Speed_bias;
+                Right_High_Speed = straight_speed + Speed_bias*0.8;   //外轮加的少一点
+            }
+            else{               //右转
+                Left_High_Speed = straight_speed + Speed_bias*0.8;  
+                Right_High_Speed = straight_speed - Speed_bias;
+            }
         }
     }
+
     if(outtrack_flag){
         Left_High_Speed=0;
         Right_High_Speed=0;
@@ -183,7 +227,7 @@ void pit_handler (void)
     encoder_clear_count(ENCODER_DIR_1);                                		   //清空编码器计数
     encoder_clear_count(ENCODER_DIR_2);    
     
-    if(time_count==50){
+    if(time_count==20){
         sprintf((char *)data_buffer,"%.2f %.2f %.2f %.2f\n",ADC_bias,Speed_bias,Left_High_Speed,Right_High_Speed);
         data_len = strlen(data_buffer);
         wireless_uart_send_buffer(data_buffer, data_len);
@@ -191,7 +235,7 @@ void pit_handler (void)
     }
 }
 
-double PlacePID_Control(PID*p, double Now_bias, double Set_bias, double *Turn_pd)    //???PD,????????
+double PlacePID_Control(PID*p, double Now_bias, double Set_bias, double *Turn_pd)    
 {
 	double Output;  
 	
