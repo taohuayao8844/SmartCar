@@ -26,15 +26,16 @@ int16 encoder_R = 0;
 #define PWM_R1              (PWMB_CH2_P51)
 #define PWM_R2              (PWMB_CH3_P52)
 
-#define MAX_DUTY            (30)                //设置最大占空比50%
+#define MAX_DUTY            (40)                //设置最大占空比50%
 
 int L1 = 0, L2 = 0, R2 = 0, R1 = 0;				    //四路电感值
 double ADC_bias = 0;                    //差比和偏差值
 double Left_High_Speed = 0,Right_High_Speed = 0,Speed_bias = 0;  //左右电机目标速度,速度偏差调整
 double L_MOTOR_Duty = 18,R_MOTOR_Duty = 18;            //左右电机占空比
-double basic_Speed=45,straight_speed=55;           //基础速度，直线速度
+double basic_Speed=60,straight_speed=70;           //基础速度，直线速度
 int outtrack_flag=0,into_island=0,out_island=0;                //冲出赛道标志、入环岛标志、出环岛标志
 int straight_count=0,into_island_count=0,into_island_flag=0,out_island_count=0,out_island_flag=0;            //直线计数、入（出）环岛计时、数
+int turn_straightangle=0;
 uint16 adc_max[4]={950,950,950,950};             //存储各电感最大值
 
 typedef struct PID                              //PID结构体
@@ -140,7 +141,7 @@ void pit_handler (void)
 		out_island_flag++;	
     }else if(out_island_flag>0){
           out_island_flag++;                              //记时
-            if(out_island_flag>=40){                     
+            if(out_island_flag>=20){                     
                     out_island=1;                         //打脚
                     out_island_count++;
                     if(out_island_count>=20){
@@ -151,6 +152,11 @@ void pit_handler (void)
             }
     }
 
+    if(L1<50&&L2<20&&R2>90&&R1>50||R1<50&&R2<20&&L2>90&&L1>50){
+        turn_straightangle=1;
+    }else{
+        turn_straightangle=0;
+    }
 
     if(L1<10&&L2<10&&R2<10&&R1<10){          //冲出赛道保护
         outtrack_flag=1;
@@ -164,12 +170,22 @@ void pit_handler (void)
 
     if(into_island==1){                 //入环岛打脚
         gpio_set_level(IO_P07, 1);
-        Left_High_Speed = basic_Speed - 20;
-        Right_High_Speed = basic_Speed + 20*0.8;   
+        Left_High_Speed = basic_Speed - 30;
+        Right_High_Speed = basic_Speed + 30*0.8;   
     }else if(out_island){
         gpio_set_level(IO_P07, 1);
-        Left_High_Speed = basic_Speed + 30*0.8;  
-        Right_High_Speed = basic_Speed - 30;
+        Left_High_Speed = basic_Speed - 30;  
+        Right_High_Speed = basic_Speed + 30*0.8;
+    }else if(turn_straightangle==1){
+        gpio_set_level(IO_P07, 1);
+        if(ADC_bias>=0){       
+            Left_High_Speed = 0;
+            Right_High_Speed = basic_Speed + Speed_bias*2*0.8;   
+        }
+        else{               
+                Left_High_Speed = basic_Speed + Speed_bias*2*0.8;  
+                Right_High_Speed = 0;
+        }
     }else{
         gpio_set_level(IO_P07, 0);
         if(ADC_bias<10&&ADC_bias>-10&&straight_count<15){           //在直道计数
