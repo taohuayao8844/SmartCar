@@ -18,7 +18,7 @@ int straight_count=0;               //直线计数
 uint16 adc_max[4]={950,940,950,950};             //存储各电感最大值
 
 #define FILTER_WINDOW_SIZE 5  // 中值滤波窗口大小
-#define LPF_ALPHA 0.3         // 低通滤波系数
+#define LPF_ALPHA 0.3         // 低通滤波系数,新采样值占30%权重，历史值占70%
 
 // 每个电感通道的滤波结构体
 typedef struct {
