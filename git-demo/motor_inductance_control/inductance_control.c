@@ -17,61 +17,6 @@ int outtrack_flag=0;                //冲出赛道标志
 int straight_count=0;               //直线计数
 uint16 adc_max[4]={950,940,950,950};             //存储各电感最大值
 
-#define FILTER_WINDOW_SIZE 5  // 中值滤波窗口大小
-#define LPF_ALPHA 0.3         // 低通滤波系数,新采样值占30%权重，历史值占70%
-
-// 每个电感通道的滤波结构体
-typedef struct {
-    float buffer[FILTER_WINDOW_SIZE];  // 中值滤波缓冲区
-    int buffer_index;                 // 中值滤波缓冲区索引
-    float lpf_value;                   // 低通滤波值
-} SensorFilter;
-
-SensorFilter L1_filter, L2_filter, R1_filter, R2_filter;
-
-//冒泡排序
-void bubble_sort(float *arr, int n) {
-    for(int i = 0; i < n-1; i++) {
-        for(int j = 0; j < n-i-1; j++) {
-            if(arr[j] > arr[j+1]) {
-                float temp = arr[j];
-                arr[j] = arr[j+1];
-                arr[j+1] = temp;
-            }
-        }
-    }
-}
-
-// 中值滤波函数
-float median_filter(SensorFilter *filter, float new_value) {
-	
-    // 更新缓冲区
-    filter->buffer[filter->buffer_index++] = new_value;
-    if(filter->buffer_index >= FILTER_WINDOW_SIZE) {
-        filter->buffer_index = 0;
-    }
-    
-    // 创建临时数组并排序
-    float temp[FILTER_WINDOW_SIZE];
-    memcpy(temp, filter->buffer, sizeof(filter->buffer));
-    bubble_sort(temp, FILTER_WINDOW_SIZE);
-    
-    // 返回中值
-    return temp[FILTER_WINDOW_SIZE/2];
-}
-
-// 低通滤波函数
-float low_pass_filter(SensorFilter *filter, float new_value) {
-    filter->lpf_value = LPF_ALPHA * new_value + (1 - LPF_ALPHA) * filter->lpf_value;
-    return filter->lpf_value;
-}
-
-// 串联滤波函数（先中值后低通）
-float cascade_filter(SensorFilter *filter, float raw_value) {
-    float median_val = median_filter(filter, raw_value);
-    return low_pass_filter(filter, median_val);
-}
-
 typedef struct PID
 {
 	double iError;  
@@ -135,12 +80,6 @@ void pit_handler (void){
     L2=adc_mean_filter_convert(ADC_CHANNEL2,5);      
     R2=adc_mean_filter_convert(ADC_CHANNEL3,5);    
     R1=adc_mean_filter_convert(ADC_CHANNEL4,5);
-
-    // 应用串联滤波
-    L1 = cascade_filter(&L1_Filter, raw_L1);
-    L2 = cascade_filter(&L2_Filter, raw_L2);
-    R2 = cascade_filter(&R2_Filter, raw_R2);
-    R1 = cascade_filter(&R1_Filter, raw_R1);
 	
     L1=(unsigned long)L1*100/adc_max[0];           //归一化  (0-100)
     L2=(unsigned long)L2*100/adc_max[1];
