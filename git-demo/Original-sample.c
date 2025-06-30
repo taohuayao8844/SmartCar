@@ -31,8 +31,8 @@ int16 encoder_R = 0;
 int L1 = 0, L2 = 0, R2 = 0, R1 = 0;				    //四路电感值
 double ADC_bias = 0;                    //差比和偏差值
 double Left_High_Speed = 0,Right_High_Speed = 0,Speed_bias = 0;  //左右电机目标速度,速度偏差调整
-double L_MOTOR_Duty = 18,R_MOTOR_Duty = 18;            //左右电机占空比
-double basic_Speed=60,straight_speed=70;           //基础速度，直线速度
+double L_MOTOR_Duty = 0,R_MOTOR_Duty = 0;            //左右电机占空比
+double basic_Speed=70,straight_speed=80;           //基础速度，直线速度
 int outtrack_flag=0,into_island=0,out_island=0;                //冲出赛道标志、入环岛标志、出环岛标志
 int straight_count=0,into_island_count=0,into_island_flag=0,out_island_count=0,out_island_flag=0;            //直线计数、入（出）环岛计时、数
 int turn_straightangle=0;
@@ -53,7 +53,7 @@ double L_MOTOR_PID[3] = {0.4, 0.002, 0.00005};                  //PID参数设�
 double R_MOTOR_PID[3] = {0.3, 0.001, 0.0001};
 double Turn_pd[2]={0.6,0.2};          
                                                        
-double PlacePID_Control(PID*p, double Now_bias, double Set_bias, double *Turn_pd);      ////位置式PD，计算给电机的偏差
+double PlacePID_Control(PID*p, double Now_bias, double Set_bias, double *Turn_pd);      //位置式PD，计算给电机的偏差
 double SpeedPID_Control(PID*p, double ActualSpeed, double SetSpeed, double *MOTOR_PID);        //增量式PID（左右轮电机速度闭环控制）
 double motor_limit(double duty);                          //电机限幅保护
 
@@ -101,7 +101,7 @@ void main()
     memset(&Left_MOTOR_PID,0,sizeof(Left_MOTOR_PID));        
     memset(&Right_MOTOR_PID,0,sizeof(Right_MOTOR_PID));        
 
-    pit_ms_init(PIT_CH, 10);                                                   //定时器周期初始化100ms
+    pit_ms_init(PIT_CH, 10);                                                   //定时器周期初始化10ms
 
 	while(1)
     {
@@ -122,11 +122,11 @@ void pit_handler (void)
     R2=(unsigned long)R2*100/adc_max[2];
     R1=(unsigned long)R1*100/adc_max[3];
 
-    if(L1>=94&&L2<=15&&R1>=70&&into_island_flag==0){     //预入环
-        into_island_flag++;
-    }else if(into_island_flag>0){                    
+    if(L1>=94&&L2<=15&&R1>=70&&into_island_flag==0){     //预入环             （车子前瞻3/4差不多好用，速度60）
+        into_island_flag++;                                                  //右环岛逻辑没写，但能直接进（不过有概率）
+    }else if(into_island_flag>0){                               
         into_island_flag++;                              //记时
-        if(into_island_flag>=70){
+        if(into_island_flag>=50){
                 into_island=1;                           //打脚
                 into_island_count++;
                 if(into_island_count>=5){
@@ -141,7 +141,7 @@ void pit_handler (void)
 		out_island_flag++;	
     }else if(out_island_flag>0){
           out_island_flag++;                              //记时
-            if(out_island_flag>=20){                     
+            if(out_island_flag>=10){                     
                     out_island=1;                         //打脚
                     out_island_count++;
                     if(out_island_count>=20){
@@ -174,8 +174,8 @@ void pit_handler (void)
         Right_High_Speed = basic_Speed + 30*0.8;   
     }else if(out_island){
         gpio_set_level(IO_P07, 1);
-        Left_High_Speed = basic_Speed - 30;  
-        Right_High_Speed = basic_Speed + 30*0.8;
+        Left_High_Speed = basic_Speed + 30*0.8;  
+        Right_High_Speed = basic_Speed - 30;
     }else if(turn_straightangle==1){
         gpio_set_level(IO_P07, 1);
         if(ADC_bias>=0){       
